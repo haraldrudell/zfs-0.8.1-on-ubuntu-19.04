@@ -1,0 +1,69 @@
+#!/bin/bash -eu
+# build zfs 0.8.1 (encryption) on Ubuntu 19.04
+# © 2019 - present Harald Rudell <harald.rudell@gmail.com> (https://haraldrudell.github.io/haraldrudell)
+
+# this script completed successfully:
+# 190615 current Ubuntu 19.04 amd64
+# completion time: 20 minutes
+
+# Release notes: https://github.com/zfsonlinux/zfs/releases/tag/zfs-0.8.1
+# build: https://github.com/zfsonlinux/zfs/wiki/Custom-Packages#debian-and-ubuntu
+ZFSURL=https://github.com/zfsonlinux/zfs/releases/download/zfs-0.8.1/zfs-0.8.1.tar.gz
+KERNEL="$(uname -r)" # 5.0.0-16-generic
+
+run() {
+  getBuildDir || return
+  echo "directory: $BUILD_DIR"
+  cd "$BUILD_DIR" || return
+  runApt "$KERNEL" || return
+  buildZfs "$ZFSURL" || return
+}
+
+runApt() {
+  if [ ! "${1-}" ]; then echo >&2 "runApt: no kernel version" && return 1; fi
+  sudo apt --yes install \
+    build-essential autoconf libtool gawk alien fakeroot \
+    gdebi wget \
+    zlib1g-dev uuid-dev libattr1-dev libblkid-dev libselinux-dev libudev-dev libaio-dev \
+    parted lsscsi ksh libssl-dev libelf-dev \
+    linux-headers-$1 \
+    python3 python3-dev python3-setuptools python3-cffi \
+    dkms \
+    || return
+}
+
+buildZfs() {
+  if [ ! "${1-}" ]; then echo >&2 "buildZfs: missing url" && return 1; fi
+  local URL="$1"
+  local TARFILE="$(basename "$1")"
+  local DIR="$PWD/${TARFILE%.tar.gz}"
+  local DEB DEBS
+  if [ ! -d "$DIR" ]; then
+    wget $URL || return
+    tar --extract --gzip --file "$TARFILE" || return
+  fi
+  if [ ! -d "$DIR" ]; then echo >&2 "buildZfs: untar failed" && return 1; fi
+  cd "$DIR" || return
+  ./configure || return
+  make --silent --jobs=4 || return
+  make --jobs=1 deb || return
+  DEBS=($(ls *.deb | grep -v devel)) || return
+  for DEB in "${DEBS[@]}"; do
+    sudo gdebi --quiet --non-interactive $DEB || return
+  done
+}
+
+getBuildDir() {
+  local D=/opt/$USER
+  if [ -d "$D" ]; then BUILD_DIR="$D/$SCRIPTNAME"
+  else BUILD_DIR=~/"$SCRIPTNAME"
+  fi
+  if [ ! -d "$BUILD_DIR" ]; then
+    mkdir --parents "$BUILD_DIR"
+    chmod 700 "$BUILD_DIR"
+  fi
+}
+
+SCRIPTNAME="$(basename "${BASH_SOURCE[0]}")"
+run || { X=$?; echo >&2 "$SCRIPTNAME status code: $X"; exit $X; }
+echo "$SCRIPTNAME completed successfully"

@@ -1,0 +1,25 @@
+#!/bin/bash -eu
+# disable zfs 0.7.12 kms on Ubuntu 19.04
+# © 2019 - present Harald Rudell <harald.rudell@gmail.com> (https://haraldrudell.github.io/haraldrudell)
+
+KERNEL="$(uname -r)" # 5.0.0-16-generic
+KERNELDIR="/lib/modules/$KERNEL/kernel"
+echo "Kernel: $KERNEL"
+DIR=~/zfs-kmod-0.7.12-1ubuntu5
+mkdir --parents --mode=700 "$DIR"
+
+echo "Unloading kernel modules"
+rmmod zfs
+rmmod icp
+rmmod zcommon
+rmmod znvpair
+rmmod spl
+rmmod zavl
+rmmod zunicode
+
+mv --no-clobber --verbose "$KERNELDIR/spl" "$DIR"
+mv --no-clobber --verbose "$KERNELDIR/zfs" "$DIR"
+
+modprobe zfs
+
+echo "Success!"
